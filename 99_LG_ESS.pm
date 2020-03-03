@@ -64,9 +64,7 @@ sub LG_ESS_Initialize($)
 
 	$hash->{AttrList}       	= "disable:0,1 " .
 								  "header " .
-								  "BasicPricePerAnnum " .
 								  "IntervalDynVal " .
-								  "Currency:&#8364;,&#163;,&#36; " .
 								   $readingFnAttributes;
 }
 ####END####### Initialize module ###############################################################################END#####
@@ -119,7 +117,7 @@ sub LG_ESS_Define($$$)
 	$hash->{STATE}              			= "active";
 	$hash->{IP}             				= $Ip;
 	$hash->{PASSWORD}          				= $Password;
-	$hash->{INTERVALDYNVAL}                 = 300;
+	$hash->{INTERVALDYNVAL}                 = 30;
 	$hash->{POLLINGTIMEOUT}                 = 10;
 	@{$hash->{Secret}{STATE_URLS}}          = sort @STATE_URLS;
 	
@@ -234,13 +232,20 @@ sub LG_ESS_Set($@)
 	my ( $hash, $name, $cmd, @args ) = @_;
 
 	return "\"set $name\" needs at least one argument" unless(defined($cmd));
+	
+	my $availableCmds = "SwitchOff ";
+	$availableCmds.="GetState ";
 
 	if($cmd eq "GetState")
 	{
-		InternalTimer(gettimeofday() + 10, "LG_ESS_GetState", $hash, 1);	
+		LG_ESS_GetState($hash);		
+	}
+	elsif($cmd eq "SwitchOff")
+	{	
+		LG_ESS_SwitchOff($hash);
 	}
 	
-	return "GetState";
+	return $availableCmds if($cmd eq "?");
 
 }
 ####END####### Manipulate reading after "set" command by fhem ##################################################END#####
@@ -286,6 +291,58 @@ sub LG_ESS_Login($)
 }
 ####END####### Subroutine initial contact of services via HttpUtils ############################################END#####
 
+
+###START###### Subroutine initial contact of services via HttpUtils ###########################################START####
+sub LG_ESS_SwitchOff($)
+{
+	my ($hash, $def)                 = @_;
+	my $ip           				 = $hash->{IP} ;
+	my $name                         = $hash->{NAME} ;
+
+	my $PollingTimeout               = $hash->{POLLINGTIMEOUT};
+	my $Password                     = $hash->{PASSWORD};
+	my $auth_key                     = $hash->{temp}{AUTH_KEY};
+	$hash->{temp}{SERVICE}           = "Switch off";
+
+	### Set status of fhem module
+	$hash->{STATE} = "Switch off";	
+	### Log file entry for debugging
+	Log3 $name, 5, $name. "Switch ESS off";
+	
+	#my $url = "https://".$ip."/v1/user/operation/status";
+	#my $content = '{"auth_key": "'.$auth_key .'","operation": "stop"}';
+	#my $content = '{"auth_key": "'.$auth_key .'","operation": "start"}';	
+	
+	my $url = "https://".$ip."/v1/user/setting/batt";
+	my $content = '{"auth_key": "'.$auth_key .'","alg_setting": "off"}';
+	
+	### Get the values
+	my $sslPara->{sslargs} = { verify_hostname => 0};
+	my $param = {
+					url        => $url,
+					timeout    => $PollingTimeout,
+					data	   => $content,
+					hash       => $hash,
+					method     => "PUT",
+					sslargs    => $sslPara,
+					header     => "Content-Type: application/json",
+					callback   =>  \&LG_ESS_ParseHttpResponseInit
+				};
+	
+	
+	### Get the value
+	HttpUtils_NonblockingGet($param);
+}
+####END####### Subroutine initial contact of services via HttpUtils ############################################END#####
+
+
+
+
+
+
+
+
+
 ###START###### Subroutine initial contact of services via HttpUtils ###########################################START####
 sub LG_ESS_GetState($)
 {
@@ -318,7 +375,6 @@ sub LG_ESS_GetState($)
 					callback   =>  \&LG_ESS_ParseHttpResponseInit
 				};
 	
-
 	### Set status of fhem module
 	$hash->{STATE} = "Polling";
 	
@@ -363,113 +419,147 @@ sub LG_ESS_ParseHttpResponseInit($)
 		Log3 $name, 5, $name . "______________________________________________________________________________________________________________________";
 		return "ERROR";	
 	}
-	
-	
-	Log3 $name, 5, $name . "LG_ESS_ParseHttpResponseInit Data: ".$data;
-	if ($data =~ m/auth_key failed/i)
-	{
-		### Create Log entry
-		Log3 $name, 2, $name . " : LG_ESS_ParseHttpResponseInit - Login failed!  Timer restarted to try again in 10s";
-		
-		### Set status of fhem module
-		$hash->{STATE} = "ERROR - Login failed... Try to re-connect in 10s";
-	
-		### Start the timer for polling again but wait 10s
-		InternalTimer(gettimeofday()+10, "LG_ESS_Login", $hash, 1);	
-	}	
-	
-	my $decodedData = decode_json($data);
-	
-	my $record;	
-	my $key;
-	my $key1;
-	my $varName;
-	my $value;
-	my $valueOld;
-	
-	if($Service eq "LOGIN")
-	{
-		my $auth_key =$decodedData->{'auth_key'};
-		if ($auth_key ne "failed")
-		{
-			$hash->{temp}{AUTH_KEY} = $auth_key;
-			Log3 $name, 2, $name . " : LG_ESS_ParseHttpResponseInit - Login success! auth key:".$auth_key;
-			
-			$hash ->{temp}{ServiceCounterInit} = 0;
-			LG_ESS_GetState($hash);
-		}
-
-	} else 
+    elsif($data ne "") 
 	{	
-		if (($Service eq "/v1/user/essinfo/common") || 
-		    ($Service eq "/v1/user/essinfo/home") || 
-			($Service eq "/v1/user/setting/systeminfo"))
+	
+		Log3 $name, 5, $name . "LG_ESS_ParseHttpResponseInit Data: ".$data;
+		if ($data =~ m/auth_key failed/i)
 		{
+			### Create Log entry
+			Log3 $name, 2, $name . " : LG_ESS_ParseHttpResponseInit - Login failed!  Timer restarted to try again in 10s";
 			
+			### Set status of fhem module
+			$hash->{STATE} = "ERROR - Login failed... Try to re-connect in 10s";
+		
+			### Start the timer for polling again but wait 10s
+			InternalTimer(gettimeofday()+10, "LG_ESS_Login", $hash, 1);	
+		}	
+		
+		my $decodedData = decode_json($data);
+		
+		my $record;	
+		my $key;
+		my $key1;
+		my $varName;
+		my $value;
+		my $valueOld;
+		
+		if($Service eq "LOGIN")
+		{
+			my $auth_key =$decodedData->{'auth_key'};
+			if ($auth_key ne "failed")
+			{
+				$hash->{temp}{AUTH_KEY} = $auth_key;
+				Log3 $name, 2, $name . " : LG_ESS_ParseHttpResponseInit - Login success! auth key:".$auth_key;
+				
+				$hash ->{temp}{ServiceCounterInit} = 0;
+				LG_ESS_GetState($hash);
+			}
+
+		} else 
+		{	
+
 			### Initialize Bulkupdate
 			readingsBeginUpdate($hash);
-			
-			foreach $record ($decodedData) {
-				foreach $key (keys(%$record)) {
+				
+			if ($Service eq "/v1/user/essinfo/common")		
+			{		
+				foreach $record ($decodedData) {
+					foreach $key (keys(%$record)) {
+						eval{
+							foreach $key1 (keys %{$record->{$key}} ){
+								$varName ="/essinfo/common/".$key."/".$key1;
+								$value = $record->{$key}{$key1};
+								### Write Reading
+								readingsBulkUpdate($hash, $varName, $value, 1);
+							}
+						}
+					}
+				}
+			}
+			elsif ($Service eq "/v1/user/essinfo/home")		
+			{
+				foreach $record ($decodedData) {
+					foreach $key (keys(%$record)) {
+						eval{
+							foreach $key1 (keys %{$record->{$key}} ){
+								$varName ="/essinfo/home/".$key."/".$key1;
+								$value = $record->{$key}{$key1};
+								### Write Reading
+								readingsBulkUpdate($hash, $varName, $value, 1);
+							}
+						}
+					}
+				}
+			}		
+			elsif ($Service eq "/v1/user/setting/systeminfo")		
+			{
+				foreach $record ($decodedData) {
+					foreach $key (keys(%$record)) {
+						eval{
+							foreach $key1 (keys %{$record->{$key}} ){
+								$varName ="/setting/systeminfo/".$key."/".$key1;
+								$value = $record->{$key}{$key1};						
+								### Write Reading
+								readingsBulkUpdate($hash, $varName, $value, 1);
+							}
+						}
+					}
+				}
+			}		
+			elsif ($Service eq "/v1/user/setting/network")
+			{
+				foreach $record ($decodedData) {
 					eval{
-						foreach $key1 (keys %{$record->{$key}} ){
-							$varName ="/$key/$key1";
-							$value = $record->{$key}{$key1};
-							
+						foreach $key (keys %{$record} ){
+							$varName ="/setting/network/".$key;
+							$value = $record->{$key};
 							### Write Reading
 							readingsBulkUpdate($hash, $varName, $value, 1);
 						}
 					}
 				}
 			}
-		
+			elsif ($Service eq "/v1/user/setting/batt")
+			{
+				foreach $record ($decodedData) {
+					eval{
+						foreach $key (keys %{$record} ){
+							$varName ="/setting/batt/".$key;
+							$value = $record->{$key};
+							### Write Reading
+							readingsBulkUpdate($hash, $varName, $value, 1);
+						}
+					}
+				}
+			}
+			else
+			{
+				print $data;
+			}
+					
 			### Finish and execute Bulkupdate
 			readingsEndUpdate($hash, 1);
-		}
-		elsif ($Service eq "/v1/user/setting/network")
-		{
-#			for $record (sort keys %$decodedData){
-#				for $key (sort keys %{ $decodedData->{$record} }){
-#					$varName ="/NetworkSettings/$key";
-#					$value = $decodedData->{$record}{$key};
-#					readingsSingleUpdate( $hash, $varName, $value, 1);
-#				}
-#			}
 			
+			### If the list of state_urls has not been finished yet
+			if ($ServiceCounterInit < ($NumberStateUrls-1))
+			{
+				++$ServiceCounterInit;		
+				$hash ->{temp}{ServiceCounterInit} = $ServiceCounterInit;
+				LG_ESS_GetState($hash);
+			}
+			else
+			{
+				$hash ->{temp}{ServiceCounterInit} = 0;
+				###START###### Initiate the timer for first time polling of  values from LG_ESS but wait 10s ###############START####
+				InternalTimer(gettimeofday() + $IntervalDynVal, "LG_ESS_GetState", $hash, 1);
+				Log3 $name, 4, $name. " : LG_ESS - Internal timer for Initialisation of services started again.";
+				####END####### Initiate the timer for first time polling of  values from LG_ESS but wait 10s ################END#####
+				### Set status of fhem module
+				$hash->{STATE} = "Standby";
+			}
+				
 		}
-		elsif ($Service eq "/v1/user/setting/batt")
-		{
-#			for $record (sort keys %$decodedData){
-#				for $key (sort keys %{ $decodedData->{$record} }){
-#					$varName ="/BatterieSettings/$key";
-#					$value = $decodedData->{$record}{$key};
-#					readingsSingleUpdate( $hash, $varName, $value, 1);
-#				}
-#			}
-		}
-		else
-		{
-			print $data;
-		}
-		
-		### If the list of state_urls has not been finished yet
-		if ($ServiceCounterInit < ($NumberStateUrls-1))
-		{
-			++$ServiceCounterInit;		
-			$hash ->{temp}{ServiceCounterInit} = $ServiceCounterInit;
-			LG_ESS_GetState($hash);
-		}
-		else
-		{
-			$hash ->{temp}{ServiceCounterInit} = 0;
-			###START###### Initiate the timer for first time polling of  values from LG_ESS but wait 10s ###############START####
-			InternalTimer(gettimeofday() + $IntervalDynVal, "LG_ESS_GetState", $hash, 1);
-			Log3 $name, 4, $name. " : LG_ESS - Internal timer for Initialisation of services started again.";
-			####END####### Initiate the timer for first time polling of  values from LG_ESS but wait 10s ################END#####
-			### Set status of fhem module
-			$hash->{STATE} = "Standby";
-		}
-			
 	}
 }
 ####END####### Subroutine to download complete initial data set from gateway ###################################END#####
