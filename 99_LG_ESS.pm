@@ -111,7 +111,6 @@ sub LG_ESS_Define($$$)
 	);
 	
 	
-	
 	### Writing values to global hash
 	$hash->{NAME}							= $name;
 	$hash->{STATE}              			= "active";
@@ -232,20 +231,35 @@ sub LG_ESS_Set($@)
 	my ( $hash, $name, $cmd, @args ) = @_;
 
 	return "\"set $name\" needs at least one argument" unless(defined($cmd));
-	
-	my $availableCmds = "SwitchOff ";
-	$availableCmds.="GetState ";
 
 	if($cmd eq "GetState")
 	{
 		LG_ESS_GetState($hash);		
 	}
-	elsif($cmd eq "SwitchOff")
+	elsif($cmd eq "Test")
+	{		
+		LG_ESS_Cmd($hash,"EssTest");
+	}	
+	elsif($cmd eq "SwitchESS")
 	{	
-		LG_ESS_SwitchOff($hash);
+		if($args[0] eq "on")
+	   {
+	      LG_ESS_Cmd($hash,"EssSwitchOn");	   
+	   }
+	   elsif($args[0] eq "off")
+	   {
+	      LG_ESS_Cmd($hash,"EssSwitchOff");
+	   }  
+	   else
+	   {
+	      return "Unknown value $args[0] for $cmd, choose one of GetState SwitchESS Test";
+		  
+	   }  
 	}
-	
-	return $availableCmds if($cmd eq "?");
+	else
+	{
+		return "Unknown argument $cmd, choose one of GetState:noArg SwitchESS:on,off Test:noArg";
+	}
 
 }
 ####END####### Manipulate reading after "set" command by fhem ##################################################END#####
@@ -259,7 +273,7 @@ sub LG_ESS_Login($)
 
 	my $PollingTimeout               = $hash->{POLLINGTIMEOUT};
 	my $Password                     = $hash->{PASSWORD};
-	$hash->{temp}{SERVICE}           = "LOGIN";
+	$hash->{temp}{SERVICE}           = "Login";
 	
 	### Stop the current timer
 	RemoveInternalTimer($hash);
@@ -270,10 +284,10 @@ sub LG_ESS_Login($)
 	Log3 $name, 5, $name. "Login to LG ESS Home";
 	
 	my $url = "https://".$ip."/v1/user/setting/login";
-	my $sslPara->{sslargs} = { verify_hostname => 0};
 	my $content = '{"password": "'.$Password .'"}';
 	
 	### Get the values
+	my $sslPara->{sslargs} = { verify_hostname => 0};
 	my $param = {
 					url        => $url,
 					timeout    => $PollingTimeout,
@@ -293,28 +307,45 @@ sub LG_ESS_Login($)
 
 
 ###START###### Subroutine initial contact of services via HttpUtils ###########################################START####
-sub LG_ESS_SwitchOff($)
+sub LG_ESS_Cmd($$)
 {
-	my ($hash, $def)                 = @_;
+	my ($hash, $cmd)                 = @_;
 	my $ip           				 = $hash->{IP} ;
 	my $name                         = $hash->{NAME} ;
 
 	my $PollingTimeout               = $hash->{POLLINGTIMEOUT};
 	my $Password                     = $hash->{PASSWORD};
 	my $auth_key                     = $hash->{temp}{AUTH_KEY};
-	$hash->{temp}{SERVICE}           = "Switch off";
+	
+	$hash->{temp}{SERVICE}           = $cmd;
 
 	### Set status of fhem module
-	$hash->{STATE} = "Switch off";	
+	$hash->{STATE} = $cmd;	
 	### Log file entry for debugging
 	Log3 $name, 5, $name. "Switch ESS off";
 	
-	#my $url = "https://".$ip."/v1/user/operation/status";
-	#my $content = '{"auth_key": "'.$auth_key .'","operation": "stop"}';
-	#my $content = '{"auth_key": "'.$auth_key .'","operation": "start"}';	
-	
-	my $url = "https://".$ip."/v1/user/setting/batt";
-	my $content = '{"auth_key": "'.$auth_key .'","alg_setting": "off"}';
+	my $url;
+	my $content;
+	if ($cmd eq "Login")
+	{
+		$url = "https://".$ip."/v1/user/setting/login";
+		$content = '{"password": "'.$Password .'"}';
+	}
+	elsif ($cmd eq "EssSwitchOn")
+	{
+		$url = "https://".$ip."/v1/user/operation/status";
+		$content = '{"auth_key": "'.$auth_key .'","operation": "start"}';
+	}
+	elsif ($cmd eq "EssSwitchOff")
+	{
+		$url = "https://".$ip."/v1/user/operation/status";
+		$content = '{"auth_key": "'.$auth_key .'","operation": "stop"}';
+	}		
+	elsif ($cmd eq "EssTest")
+	{
+		$url = "https://".$ip."/v1/user/setting/batt";
+		$content = '{"auth_key": "'.$auth_key .'","alg_setting": "off"}';
+	}
 	
 	### Get the values
 	my $sslPara->{sslargs} = { verify_hostname => 0};
@@ -325,7 +356,7 @@ sub LG_ESS_SwitchOff($)
 					hash       => $hash,
 					method     => "PUT",
 					sslargs    => $sslPara,
-					header     => "Content-Type: application/json",
+					header     => { "X-HTTP-Method-Override" => "PUT", "Content-Type" => "application/json" },
 					callback   =>  \&LG_ESS_ParseHttpResponseInit
 				};
 	
@@ -444,7 +475,7 @@ sub LG_ESS_ParseHttpResponseInit($)
 		my $value;
 		my $valueOld;
 		
-		if($Service eq "LOGIN")
+		if($Service eq "Login")
 		{
 			my $auth_key =$decodedData->{'auth_key'};
 			if ($auth_key ne "failed")
@@ -458,10 +489,8 @@ sub LG_ESS_ParseHttpResponseInit($)
 
 		} else 
 		{	
-
 			### Initialize Bulkupdate
 			readingsBeginUpdate($hash);
-				
 			if ($Service eq "/v1/user/essinfo/common")		
 			{		
 				foreach $record ($decodedData) {
@@ -535,7 +564,7 @@ sub LG_ESS_ParseHttpResponseInit($)
 			}
 			else
 			{
-				print $data;
+				Log3 $name, 4, $name . " : LG_ESS_ParseHttpResponseInit - ".$Service." ".$data;
 			}
 					
 			### Finish and execute Bulkupdate
