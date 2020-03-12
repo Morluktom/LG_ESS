@@ -236,11 +236,37 @@ sub LG_ESS_Set($@)
 	{
 		LG_ESS_GetState($hash);		
 	}
-	elsif($cmd eq "Test")
+	elsif($cmd eq "BatteryFastChargingMode")
 	{		
-		LG_ESS_Cmd($hash,"EssTest");
+		if($args[0] eq "on")
+	   {
+	      LG_ESS_Cmd($hash,"BatteryFastChargingModeOn");	   
+	   }
+	   elsif($args[0] eq "off")
+	   {
+	      LG_ESS_Cmd($hash,"BatteryFastChargingModeOff");
+	   }  
+	   else
+	   {
+	      return "Unknown value $args[0] for $cmd, choose one of GetState SystemOperating BatteryFastChargingMode BatteryWinterMode";  
+	   }  	
 	}	
-	elsif($cmd eq "SwitchESS")
+	elsif($cmd eq "BatteryWinterMode")
+	{		
+		if($args[0] eq "on")
+	   {
+	      LG_ESS_Cmd($hash,"BatteryWinterModeOn");	   
+	   }
+	   elsif($args[0] eq "off")
+	   {
+	      LG_ESS_Cmd($hash,"BatteryWinterModeOff");
+	   }  
+	   else
+	   {
+	      return "Unknown value $args[0] for $cmd, choose one of GetState SystemOperating BatteryFastChargingMode BatteryWinterMode";  
+	   }  	
+	}	
+	elsif($cmd eq "SystemOperating")
 	{	
 		if($args[0] eq "on")
 	   {
@@ -252,13 +278,16 @@ sub LG_ESS_Set($@)
 	   }  
 	   else
 	   {
-	      return "Unknown value $args[0] for $cmd, choose one of GetState SwitchESS Test";
-		  
+	      return "Unknown value $args[0] for $cmd, choose one of GetState SystemOperating BatteryFastChargingMode"; 
 	   }  
+	}
+	elsif($cmd eq "Test")
+	{
+		LG_ESS_Cmd($hash,"InstallerLogin");
 	}
 	else
 	{
-		return "Unknown argument $cmd, choose one of GetState:noArg SwitchESS:on,off Test:noArg";
+		return "Unknown argument $cmd, choose one of GetState:noArg SystemOperating:on,off BatteryFastChargingMode:on,off BatteryWinterMode:on,off Test:noArg";
 	}
 
 }
@@ -321,15 +350,13 @@ sub LG_ESS_Cmd($$)
 
 	### Set status of fhem module
 	$hash->{STATE} = $cmd;	
-	### Log file entry for debugging
-	Log3 $name, 5, $name. "Switch ESS off";
 	
 	my $url;
 	my $content;
-	if ($cmd eq "Login")
+	if ($cmd eq "InstallerLogin")
 	{
-		$url = "https://".$ip."/v1/user/setting/login";
-		$content = '{"password": "'.$Password .'"}';
+		$url = "https://".$ip."/v1/installer/login";
+		$content = '{"password": "18Feichtei79&"}';
 	}
 	elsif ($cmd eq "EssSwitchOn")
 	{
@@ -341,12 +368,27 @@ sub LG_ESS_Cmd($$)
 		$url = "https://".$ip."/v1/user/operation/status";
 		$content = '{"auth_key": "'.$auth_key .'","operation": "stop"}';
 	}		
-	elsif ($cmd eq "EssTest")
+	elsif ($cmd eq "BatteryFastChargingModeOn")
+	{
+		$url = "https://".$ip."/v1/user/setting/batt";
+		$content = '{"auth_key": "'.$auth_key .'","alg_setting": "on"}';
+	}
+	elsif ($cmd eq "BatteryFastChargingModeOff")
 	{
 		$url = "https://".$ip."/v1/user/setting/batt";
 		$content = '{"auth_key": "'.$auth_key .'","alg_setting": "off"}';
 	}
-	
+	elsif ($cmd eq "BatteryWinterModeOn")
+	{
+		$url = "https://".$ip."/v1/user/setting/batt";
+		$content = '{"auth_key": "'.$auth_key .'","wintermode": "on"}';
+	}
+	elsif ($cmd eq "BatteryWinterModeOff")
+	{
+		$url = "https://".$ip."/v1/user/setting/batt";
+		$content = '{"auth_key": "'.$auth_key .'","wintermode": "off"}';
+	}
+
 	### Get the values
 	my $sslPara->{sslargs} = { verify_hostname => 0};
 	my $param = {
@@ -359,7 +401,6 @@ sub LG_ESS_Cmd($$)
 					header     => { "X-HTTP-Method-Override" => "PUT", "Content-Type" => "application/json" },
 					callback   =>  \&LG_ESS_ParseHttpResponseInit
 				};
-	
 	
 	### Get the value
 	HttpUtils_NonblockingGet($param);
