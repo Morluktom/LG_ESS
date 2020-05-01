@@ -67,6 +67,12 @@ sub LG_ESS_Define($$$)
 	my ($hash, $def)              = @_;
 	my ($name, $type, $Ip, $Password) = split("[ \t]+", $def, 4);
 
+	#Fetching password
+	if ($Ip eq "FetchingPassword")
+	{
+		return LG_ESS_FetchingPassword($hash);
+	}
+
 	### Check whether regular expression has correct syntax
 	if(!$Ip || !$Password) 
 	{
@@ -279,6 +285,67 @@ sub LG_ESS_Set($@)
 	else
 	{
 		return "Unknown argument $cmd, choose one of GetState:noArg SystemOperating:on,off BatteryFastChargingMode:on,off BatteryWinterMode:on,off Test:noArg";
+	}
+
+}
+
+
+
+#-----------------------------------------------------------------------------------------------------------------------
+# Subroutine for fetching the password
+#-----------------------------------------------------------------------------------------------------------------------
+sub LG_ESS_FetchingPassword($)
+{
+	my ($hash, $def)				= @_;
+	my $name						= $hash->{NAME};
+	my $PollingTimeout				= 10;
+	$hash->{temp}{SERVICE}			= "Fetching Password";
+	my $Service					= $hash->{temp}{SERVICE};
+	
+	# Stop the current timer
+	RemoveInternalTimer($hash);
+
+	# Set status of fhem module
+	$hash->{STATE} = "Fetching Password";
+
+	my $url = "https://192.168.23.1/v1/user/setting/read/password";
+	my $content = '{"key": "lgepmsuser!@#"}';
+
+	my $sslPara->{sslargs} = { verify_hostname => 0};
+	my $param = {
+					url			=> $url,
+					timeout		=> $PollingTimeout,
+					data		=> $content,
+					method		=> "POST",
+					sslargs		=> $sslPara,
+					header		=> "Content-Type: application/json",
+				};
+
+	#Function call
+	my($err, $data) = HttpUtils_BlockingGet($param);
+
+	my $type;
+	my $json ->{type} = "";
+
+	if($err ne "") 
+	{
+		# Create Log entry
+		Log3 $name, 2, $name . " : LG_ESS_FetchingPassword - ERROR                : ".$Service. ": No proper Communication with Gateway: " .$err;
+		return "LG ESS: could not fetch password";	
+	}
+	elsif($data ne "") 
+	{
+
+		# Create Log entry for debugging
+		Log3 $name, 5, $name . "LG_ESS_FetchingPassword Data: ".$data;
+
+		# Decode json
+		my $decodedData = decode_json($data);
+
+		if ($decodedData->{'status'} = "success")
+		{
+			return "LG ESS Password: ".$decodedData->{'password'};
+		}
 	}
 
 }
@@ -588,6 +655,9 @@ sub LG_ESS_HttpResponseState($)
 
 
 
+
+
+
 ###START###### Subroutine initial contact of services via HttpUtils ###########################################START####
 sub LG_ESS_Cmd($$)
 {
@@ -657,12 +727,5 @@ sub LG_ESS_Cmd($$)
 	#Function call
 	HttpUtils_NonblockingGet($param);
 }
-
-
-
-
-
-
-
 
 1;
