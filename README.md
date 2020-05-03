@@ -12,7 +12,7 @@ Um das Passwort des Systems zu ermitteln muss dieses Modul mittels Strawberry Pe
 2. Dieses Modul in das FHEM Verzeichnis kopieren
 3. FHEM am Rechner starten (siehe 1)
 4. Rechner mit WLAN des LG_ESS Systems verbinden. (WLAN Passwort steht auf dem Typenschild)
-5. Folgenden Befehl in die FHEM Befehlszeile eingeben um das Passwort zu ermitteln. *define myEss LG_ESS FetchingPassword*
+5. Folgenden Befehl in die FHEM Befehlszeile eingeben um das Passwort zu ermitteln. *define myEss LG_ESS GettingPassword*
 6. Das Passwort notieren
 
 

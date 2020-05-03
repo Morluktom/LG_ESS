@@ -1,6 +1,6 @@
 ########################################################################################################################
 #
-#		99_LG_ESS.pm
+#		79_LG_ESS.pm
 #
 #		Establishes a connection to a LG ESS hybrid inverter. 
 #		This module can read out status values and control the inverter.
@@ -39,51 +39,51 @@ use warnings;
 use HTTP::Request::Common;
 use LWP::UserAgent;
 use JSON;
-my %LG_ESS_gets;
 my %LG_ESS_sets;
 
-###START###### Initialize module ##############################################################################START####
+#-----------------------------------------------------------------------------------------------------------------------
+# Initialize module
+#-----------------------------------------------------------------------------------------------------------------------
 sub LG_ESS_Initialize($)
 {
-	my ($hash)  = @_;
+	my ($hash) = @_;
 
 	$hash->{STATE}				= "Init";
 	$hash->{DefFn}				= "LG_ESS_Define";
 	$hash->{UndefFn}			= "LG_ESS_Undefine";
-	$hash->{GetFn}				= "LG_ESS_Get";
 	$hash->{SetFn} 				= "LG_ESS_Set";
 	$hash->{AttrFn}				= "LG_ESS_Attr";
 
-	$hash->{AttrList}       	= "disable:0,1 " .
-								  "header " .
-								  "IntervalDynVal " .
+	$hash->{AttrList}			= "DoNotPoll:0,1 " .
+								  "InstallerPassword " .
+								  "PollingIntervall " .
 								   $readingFnAttributes;
 }
-####END####### Initialize module ###############################################################################END#####
 
-###START###### Activate module after module has been used via fhem command "define" ##########################START####
+#-----------------------------------------------------------------------------------------------------------------------
+# Activate module after module has been used via fhem command "define"
+#-----------------------------------------------------------------------------------------------------------------------
 sub LG_ESS_Define($$$)
 {
 	my ($hash, $def)              = @_;
 	my ($name, $type, $Ip, $Password) = split("[ \t]+", $def, 4);
 
 	#Fetching password
-	if ($Ip eq "FetchingPassword")
+	if ($Ip eq "GettingPassword")
 	{
-		return LG_ESS_FetchingPassword($hash);
+		return LG_ESS_GettingPassword($hash);
 	}
 
-	### Check whether regular expression has correct syntax
+	# Check whether regular expression has correct syntax
 	if(!$Ip || !$Password) 
 	{
-		my $msg = "Wrong syntax: define <name> LG_ESS <Ip-Adress> <Password>";
-		return $msg;
+		return "Wrong syntax: define <name> LG_ESS <Ip-Adress> <Password>";
 	}
 
-	### Writing log entry
+	# Writing log entry
 	Log3 $name, 5, $name. " : LG_ESS - Starting to define module";
-	
-	###START### Check whether IPv4 address is valid
+
+	# Check whether IPv4 address is valid
 	if ($Ip =~ m/^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/)
 	{
 		Log3 $name, 4, $name. " : LG_ESS - IPv4-address is valid                  : " . $Ip;
@@ -92,53 +92,39 @@ sub LG_ESS_Define($$$)
 	{
 		return $name .": Error - IPv4 address is not valid \n Please use \"define <devicename> LG_ESS <IPv4-address> <interval/[s]> <GatewayPassword> <PrivatePassword>\" instead";
 	}
-	####END#### Check whether IPv4 address is valid	
-	
-	
-	### Stop the current timer if one exists errornous 
+
+	# Stop the current timer if one exists errornous 
 	RemoveInternalTimer($hash);
 	Log3 $name, 4, $name. " : LG_ESS - InternalTimer has been removed.";
-	
-	### Writing state urls
-	my @STATE_URLS = (
-	"/v1/user/setting/network",
-	"/v1/user/setting/systeminfo",
-	"/v1/user/setting/batt",
-	"/v1/user/essinfo/home",
-	"/v1/user/essinfo/common",
-	);
-	
-	
-	### Writing values to global hash
-	$hash->{NAME}							= $name;
-	$hash->{STATE}              			= "active";
-	$hash->{IP}             				= $Ip;
-	$hash->{PASSWORD}          				= $Password;
-	$hash->{INTERVALDYNVAL}                 = 30;
-	$hash->{POLLINGTIMEOUT}                 = 10;
-	@{$hash->{Secret}{STATE_URLS}}          = sort @STATE_URLS;
 
-	###START###### Initiate the timer for first time polling of  values from LG_ESS but wait 10s ###############START####
+	# Writing values to global hash
+	$hash->{NAME}							= $name;
+	$hash->{STATE}							= "active";
+	$hash->{IP}								= $Ip;
+	$hash->{Secret}{PASSWORD}				= $Password;
+	$hash->{PollingIntervall}				= 30;
+	$hash->{POLLINGTIMEOUT}					= 10;
+	$hash->{temp}{LogInRole}				= "User";
+
+	# Initiate the timer for first time polling of  values from LG_ESS but wait 10s
 	InternalTimer(gettimeofday()+10, "LG_ESS_UserLogin", $hash, 1);
 	Log3 $name, 4, $name. " : LG_ESS - Internal timer for Initialisation of services started for the first time.";
-	####END####### Initiate the timer for first time polling of  values from LG_ESS but wait 10s ################END#####
-
 
 	return undef;
 }
-####END####### Activate module after module has been used via fhem command "define" ############################END#####
 
-###START###### Deactivate module module after "undefine" command by fhem ######################################START####
+#-----------------------------------------------------------------------------------------------------------------------
+# Deactivate module module after "undefine" command by fhem
+#-----------------------------------------------------------------------------------------------------------------------
 sub LG_ESS_Undefine($$)
 {
 	my ($hash, $def)  = @_;
 	my $name = $hash->{NAME};	
 
-	Log3 $name, 3, $name. " GasTank- The gas calculator has been undefined. Values corresponding to Gas Counter will no longer calculated";
-	
+	Log3 $name, 3, $name. " LG_ESS has been undefined.";
+
 	return undef;
 }
-####END####### Deactivate module module after "undefine" command by fhem #######################################END#####
 
 ###START###### Handle attributes after changes via fhem GUI ###################################################START####
 sub LG_ESS_Attr(@)
@@ -146,81 +132,48 @@ sub LG_ESS_Attr(@)
 	my @a                      = @_;
 	my $name                   = $a[1];
 	my $hash                   = $defs{$name};
-	my $IntervalDynVal         = $hash->{INTERVALDYNVAL};
+	my $PollingIntervall       = $hash->{PollingIntervall};
 	
-	### Check whether "disable" attribute has been provided
-	if ($a[2] eq "disable")
+	# Check whether "DoNotPoll" attribute has been provided
+	if ($a[2] eq "DoNotPoll")
 	{
 		if    ($a[3] eq 0)
 		{	
-			$hash->{STATE} = "active";
+			# Stop the current timer
+			RemoveInternalTimer($hash);
+			InternalTimer(gettimeofday()+10, "LG_ESS_UserLogin", $hash, 1);
 		}
 		elsif ($a[3] eq 1)		
 		{	
-			$hash->{STATE} = "disabled";
+			# Stop the current timer
+			RemoveInternalTimer($hash);
 		}
 	}
-	### Check whether dynamic interval attribute has been provided
-	elsif ($a[2] eq "IntervalDynVal")
+	# Check whether dynamic interval attribute has been provided
+	elsif ($a[2] eq "PollingIntervall")
 	{
-
-		$IntervalDynVal = $a[3];
-		###START### Check whether polling interval is not too short
-		if ($IntervalDynVal > 19)
+		$PollingIntervall = $a[3];
+		# Check whether polling interval is not too short
+		if ($PollingIntervall > 9)
 		{
-			$hash->{INTERVALDYNVAL} = $IntervalDynVal;
-			Log3 $name, 4, $name. " : km200 - IntervalDynVal set to attribute value:" . $IntervalDynVal ." s";
+			$hash->{PollingIntervall} = $PollingIntervall;
+			Log3 $name, 4, $name. " : LG_ESS - PollingIntervall set to attribute value:" . $PollingIntervall ." s";
 		}
 		else
 		{
-			return $name .": Error - Gateway interval for IntervalDynVal too small - server response time longer than defined interval, please use something >=20, default is 90";
+			return $name .": Error - Gateway interval for PollingIntervall too small - server response time longer than defined interval, please use something >=10, default is 30";
 		}
-		####END#### Check whether polling interval is not too short
+	}
+	elsif ($a[2] eq "InstallerPassword")
+	{
+		$hash->{temp}{LogInRole} = "Installer";
+		# Stop the current timer
+		RemoveInternalTimer($hash);
+		InternalTimer(gettimeofday()+10, "LG_ESS_UserLogin", $hash, 1);
 	}
 	return undef;
 }
-####END####### Handle attributes after changes via fhem GUI ####################################################END#####
 
-###START###### Manipulate reading after "set" command by fhem #################################################START####
-sub LG_ESS_Get($@)
-{
-	my ( $hash, @a ) = @_;
-	
-	### If not enough arguments have been provided
-	if ( @a < 2 )
-	{
-		return "\"get SolarUtils\" needs at least one argument";
-	}
-		
-	my $GasCalcName = shift @a;
-	my $reading  = shift @a;
-	my $value; 
-	my $ReturnMessage;
-
-	if(!defined($LG_ESS_gets{$reading})) 
-	{
-		my @cList = keys %LG_ESS_sets;
-		return "Unknown argument $reading, choose one of " . join(" ", @cList);
-
-		### Create Log entries for debugging
-		Log3 $GasCalcName, 5, $GasCalcName. " : GasTank - get list: " . join(" ", @cList);
-	}
-	
-	if ( $reading ne "?")
-	{
-		### Create Log entries for debugging
-		Log3 $GasCalcName, 5, $GasCalcName. " : GasTank - get " . $reading . " with value: " . $value;
-		
-		### Write current value
-		$value = ReadingsVal($GasCalcName,  $reading, undef);
-		
-		### Create ReturnMessage
-		$ReturnMessage = $value;
-	}
-	
-	return($ReturnMessage);
-}
-####END####### Manipulate reading after "set" command by fhem ##################################################END#####
 
 ###START###### Manipulate reading after "set" command by fhem #################################################START####
 sub LG_ESS_Set($@)
@@ -231,82 +184,81 @@ sub LG_ESS_Set($@)
 
 	if($cmd eq "GetState")
 	{
-		LG_ESS_GetState($hash);		
+		LG_ESS_GetState($hash);
 	}
 	elsif($cmd eq "BatteryFastChargingMode")
-	{		
+	{
 		if($args[0] eq "on")
-	   {
-	      LG_ESS_Cmd($hash,"BatteryFastChargingModeOn");	   
-	   }
-	   elsif($args[0] eq "off")
-	   {
-	      LG_ESS_Cmd($hash,"BatteryFastChargingModeOff");
-	   }  
-	   else
-	   {
-	      return "Unknown value $args[0] for $cmd, choose one of GetState SystemOperating BatteryFastChargingMode BatteryWinterMode";  
-	   }  	
-	}	
+		{
+			LG_ESS_Cmd($hash,"BatteryFastChargingModeOn");
+		}
+		elsif($args[0] eq "off")
+		{
+			LG_ESS_Cmd($hash,"BatteryFastChargingModeOff");
+		}
+		else
+		{
+			return "Unknown value $args[0] for $cmd, choose one of on/off";  
+		}
+	}
 	elsif($cmd eq "BatteryWinterMode")
 	{		
 		if($args[0] eq "on")
-	   {
-	      LG_ESS_Cmd($hash,"BatteryWinterModeOn");	   
-	   }
-	   elsif($args[0] eq "off")
-	   {
-	      LG_ESS_Cmd($hash,"BatteryWinterModeOff");
-	   }  
-	   else
-	   {
-	      return "Unknown value $args[0] for $cmd, choose one of GetState SystemOperating BatteryFastChargingMode BatteryWinterMode";  
-	   }  	
-	}	
-	elsif($cmd eq "SystemOperating")
+		{
+			LG_ESS_Cmd($hash,"BatteryWinterModeOn");	   
+		}
+		elsif($args[0] eq "off")
+		{
+			LG_ESS_Cmd($hash,"BatteryWinterModeOff");
+		}
+		else
+		{
+			return "Unknown value $args[0] for $cmd, choose one of on/off";  
+		}
+	}
+	elsif($cmd eq "System")
 	{	
 		if($args[0] eq "on")
-	   {
-	      LG_ESS_Cmd($hash,"EssSwitchOn");	   
-	   }
-	   elsif($args[0] eq "off")
-	   {
-	      LG_ESS_Cmd($hash,"EssSwitchOff");
-	   }  
-	   else
-	   {
-	      return "Unknown value $args[0] for $cmd, choose one of GetState SystemOperating BatteryFastChargingMode"; 
-	   }  
+		{
+			LG_ESS_Cmd($hash,"EssSwitchOn");	   
+		}
+		elsif($args[0] eq "off")
+		{
+			LG_ESS_Cmd($hash,"EssSwitchOff");
+		}
+		else
+		{
+			return "Unknown value $args[0] for $cmd, choose one of on/off"; 
+		}
 	}
 	elsif($cmd eq "Test")
 	{
-		LG_ESS_Cmd($hash,"InstallerLogin");
+		#LG_ESS_InstallerLogin($hash);
+		LG_ESS_Cmd($hash,"SwitchBatteryOff");
 	}
 	else
 	{
-		return "Unknown argument $cmd, choose one of GetState:noArg SystemOperating:on,off BatteryFastChargingMode:on,off BatteryWinterMode:on,off Test:noArg";
+		return "Unknown argument $cmd, choose one of GetState:noArg System:on,off BatteryFastChargingMode:on,off BatteryWinterMode:on,off Test:noArg";
 	}
 
 }
 
-
-
 #-----------------------------------------------------------------------------------------------------------------------
-# Subroutine for fetching the password
+# Subroutine for Getting the password
 #-----------------------------------------------------------------------------------------------------------------------
-sub LG_ESS_FetchingPassword($)
+sub LG_ESS_GettingPassword($)
 {
 	my ($hash, $def)				= @_;
 	my $name						= $hash->{NAME};
 	my $PollingTimeout				= 10;
-	$hash->{temp}{SERVICE}			= "Fetching Password";
+	$hash->{temp}{SERVICE}			= "Getting Password";
 	my $Service					= $hash->{temp}{SERVICE};
 	
 	# Stop the current timer
 	RemoveInternalTimer($hash);
 
 	# Set status of fhem module
-	$hash->{STATE} = "Fetching Password";
+	$hash->{STATE} = "Getting Password";
 
 	my $url = "https://192.168.23.1/v1/user/setting/read/password";
 	my $content = '{"key": "lgepmsuser!@#"}';
@@ -330,19 +282,19 @@ sub LG_ESS_FetchingPassword($)
 	if($err ne "") 
 	{
 		# Create Log entry
-		Log3 $name, 2, $name . " : LG_ESS_FetchingPassword - ERROR                : ".$Service. ": No proper Communication with Gateway: " .$err;
+		Log3 $name, 2, $name . " : LG_ESS_GettingPassword - ERROR                : ".$Service. ": No proper Communication with Gateway: " .$err;
 		return "LG ESS: could not fetch password";	
 	}
 	elsif($data ne "") 
 	{
 
 		# Create Log entry for debugging
-		Log3 $name, 5, $name . "LG_ESS_FetchingPassword Data: ".$data;
+		Log3 $name, 5, $name . "LG_ESS_GettingPassword Data: ".$data;
 
 		# Decode json
 		my $decodedData = decode_json($data);
 
-		if ($decodedData->{'status'} = "success")
+		if ($decodedData->{'status'} eq "success")
 		{
 			return "LG ESS Password: ".$decodedData->{'password'};
 		}
@@ -359,18 +311,32 @@ sub LG_ESS_UserLogin($)
 	my $ip							= $hash->{IP};
 	my $name						= $hash->{NAME};
 	my $PollingTimeout				= $hash->{POLLINGTIMEOUT};
-	my $Password					= $hash->{PASSWORD};
-	$hash->{temp}{SERVICE}			= "User Login";
+	$hash->{temp}{SERVICE}			= "Login";
 
 	# Stop the current timer
 	RemoveInternalTimer($hash);
 
 	# Set status of fhem module
 	$hash->{STATE} = "Login";
-
-	my $url = "https://".$ip."/v1/user/setting/login";
-	my $content = '{"password": "'.$Password .'"}';
-
+	my $url;
+	my $password;
+	
+	if ($hash->{temp}{LogInRole} eq "Installer")
+	{
+		$url = "https://".$ip."/v1/installer/setting/login";
+		$password					= AttrVal($name,"InstallerPassword","");
+		# Create Log entry for debugging
+		Log3 $name, 4, $name . "LG_ESS_UserLogin - Try to log in as installer.";
+	}
+	else
+	{
+		$url			= "https://".$ip."/v1/user/setting/login";
+		$password	= $hash->{Secret}{PASSWORD};
+		# Create Log entry for debugging
+		Log3 $name, 4, $name . "LG_ESS_UserLogin - Try to log in as user.";
+	}
+	my $content = '{"password": "'.$password .'"}';
+	
 	my $sslPara->{sslargs} = { verify_hostname => 0};
 	my $param = {
 					url			=> $url,
@@ -380,7 +346,7 @@ sub LG_ESS_UserLogin($)
 					method		=> "PUT",
 					sslargs		=> $sslPara,
 					header		=> "Content-Type: application/json",
-					callback	=> \&LG_ESS_HttpResponseUserLogin
+					callback	=> \&LG_ESS_HttpResponseLogin
 				};
 
 	#Function call
@@ -388,9 +354,9 @@ sub LG_ESS_UserLogin($)
 }
 
 #-----------------------------------------------------------------------------------------------------------------------
-# Subroutine for parsing user loging json answer and getting aut_key
+# Subroutine for parsing user login json answer and getting aut_key
 #-----------------------------------------------------------------------------------------------------------------------
-sub LG_ESS_HttpResponseUserLogin($)
+sub LG_ESS_HttpResponseLogin($)
 {
 	my ($param, $err, $data)	= @_;
 	my $hash					= $param->{hash};
@@ -403,7 +369,7 @@ sub LG_ESS_HttpResponseUserLogin($)
 	if($err ne "") 
 	{
 		# Create Log entry
-		Log3 $name, 2, $name . " : LG_ESS_HttpResponseUserLogin - ERROR                : ".$Service. ": No proper Communication with Gateway: " .$err;
+		Log3 $name, 2, $name . " : LG_ESS_HttpResponseLogin - ERROR                : ".$Service. ": No proper Communication with Gateway: " .$err;
 
 		# Set status of fhem module
 		$hash->{STATE} = "ERROR - Initial Connection failed... Try to re-connect in 10s";
@@ -412,30 +378,44 @@ sub LG_ESS_HttpResponseUserLogin($)
 		InternalTimer(gettimeofday()+10, "LG_ESS_UserLogin", $hash, 1);
 
 		# Create Log entry
-		Log3 $name, 2, $name . " : LG_ESS_HttpResponseUserLogin - ERROR                : Timer restarted to try again in 10s";
+		Log3 $name, 2, $name . " : LG_ESS_HttpResponseLogin - ERROR                : Timer restarted to try again in 10s";
 		return "ERROR";	
 	}
 	elsif($data ne "") 
 	{
-
 		# Create Log entry for debugging
-		Log3 $name, 5, $name . "LG_ESS_HttpResponseUserLogin Data: ".$data;
+		Log3 $name, 5, $name . " : LG_ESS_HttpResponseLogin Data:".$data;
 
 		# Decode json
 		my $decodedData = decode_json($data);
-
-		my $auth_key =$decodedData->{'auth_key'};
-		if ($auth_key ne "failed")
+		my $status = $decodedData->{'status'};
+		
+		if ($status eq "success")
 		{
-			$hash->{temp}{AUTH_KEY} = $auth_key;
-			Log3 $name, 2, $name . " : LG_ESS_HttpResponseUserLogin - Login success! auth key:".$auth_key;
-			
+			$hash->{temp}{AUTH_KEY} = $decodedData->{'auth_key'};
+			$hash->{USERROLE} = $decodedData->{'role'};;
+			# Create Log entry
+			Log3 $name, 3, $name . " : LG_ESS_HttpResponseLogin - Login success!";
 			$hash ->{temp}{ServiceCounterInit} = 0;
+
 			LG_ESS_GetState($hash);
+		} elsif ($status eq "password_mismatched")
+		{
+			# Create Log entry
+			Log3 $name, 2, $name . " : LG_ESS_HttpResponseLogin - Login failed, password mismatched!  Timer restarted to try again in 10s";
+
+			# Set status of fhem module
+			$hash->{STATE} = "ERROR - Login failed... Try to re-connect in 10s";
+			if ($hash->{temp}{LogInRole} eq "Installer")
+			{
+				$hash->{temp}{LogInRole} = "User";
+			}
+			# Start the timer for polling again but wait 10s
+			InternalTimer(gettimeofday()+10, "LG_ESS_UserLogin", $hash, 1)
 		} else
 		{
 			# Create Log entry
-			Log3 $name, 2, $name . " : LG_ESS_HttpResponseUserLogin - Login failed!  Timer restarted to try again in 10s";
+			Log3 $name, 2, $name . " : LG_ESS_HttpResponseLogin - Login failed!  Timer restarted to try again in 10s";
 
 			# Set status of fhem module
 			$hash->{STATE} = "ERROR - Login failed... Try to re-connect in 10s";
@@ -453,15 +433,40 @@ sub LG_ESS_HttpResponseUserLogin($)
 sub LG_ESS_GetState($)
 {
 	my ($hash, $def)		= @_;
-	my $ip					= $hash->{IP} ;
-	my $name				= $hash->{NAME} ;
+	my $ip					= $hash->{IP};
+	my $name				= $hash->{NAME};
+	my $PollingIntervall	= $hash->{PollingIntervall};
 	my $ServiceCounterInit	= $hash ->{temp}{ServiceCounterInit};
-
 	my $PollingTimeout		= $hash->{POLLINGTIMEOUT};
-	my $Password			= $hash->{PASSWORD};
 	my $auth_key			= $hash->{temp}{AUTH_KEY};
-	my @state_urls			= @{$hash->{Secret}{STATE_URLS}};
-	my $NumberStateUrls		= @state_urls;
+
+	# Writing state urls
+	my @state_urls = (
+	"/v1/user/setting/network",
+	"/v1/user/setting/systeminfo",
+	"/v1/user/setting/batt",
+	"/v1/user/essinfo/home",
+	"/v1/user/essinfo/common",
+	);
+	my $numberStateUrls = @state_urls;
+
+	# If the list of state_urls has not been finished yet
+	if ($ServiceCounterInit >= $numberStateUrls)
+	{
+		#Reset counter
+		$hash ->{temp}{ServiceCounterInit} = 0;
+
+		if (AttrVal($name,"DoNotPoll","") ne "1")
+		{
+			#Start timer again
+			InternalTimer(gettimeofday() + $PollingIntervall, "LG_ESS_GetState", $hash, 1);
+			Log3 $name, 4, $name. " : LG_ESS_GetState - Internal timer for Initialisation of services started again.";
+		}
+
+		# Set status of fhem module
+		$hash->{STATE} = "Standby";
+		return;
+	}
 
 	$hash->{temp}{SERVICE} = $state_urls[$ServiceCounterInit];
 
@@ -495,10 +500,7 @@ sub LG_ESS_HttpResponseState($)
 	my $hash					= $param->{hash};
 	my $name					= $hash ->{NAME};
 	my $ServiceCounterInit		= $hash ->{temp}{ServiceCounterInit};
-	my $IntervalDynVal			= $hash->{INTERVALDYNVAL};
 	my $Service					= $hash->{temp}{SERVICE};
-	my @state_urls				= @{$hash->{Secret}{STATE_URLS}};
-	my $NumberStateUrls			= @state_urls;
 
 	my $type;
 	my $json ->{type} = "";
@@ -630,35 +632,17 @@ sub LG_ESS_HttpResponseState($)
 		# Finish and execute Bulkupdate
 		readingsEndUpdate($hash, 1);
 
-		# If the list of state_urls has not been finished yet
-		if ($ServiceCounterInit < ($NumberStateUrls-1))
-		{
-			#increase counter
-			++$ServiceCounterInit;
-			$hash ->{temp}{ServiceCounterInit} = $ServiceCounterInit;
-			LG_ESS_GetState($hash);
-		}
-		else
-		{
-			#Reset counter
-			$hash ->{temp}{ServiceCounterInit} = 0;
+		#increase counter
+		++$ServiceCounterInit;
+		$hash ->{temp}{ServiceCounterInit} = $ServiceCounterInit;
+		LG_ESS_GetState($hash);
 
-			#Start timer again
-			InternalTimer(gettimeofday() + $IntervalDynVal, "LG_ESS_GetState", $hash, 1);
-			Log3 $name, 4, $name. " : LG_ESS - Internal timer for Initialisation of services started again.";
-
-			# Set status of fhem module
-			$hash->{STATE} = "Standby";
-		}
 	}
 }
 
-
-
-
-
-
-###START###### Subroutine initial contact of services via HttpUtils ###########################################START####
+#-----------------------------------------------------------------------------------------------------------------------
+# Subroutine for sending a command to ess system
+#-----------------------------------------------------------------------------------------------------------------------
 sub LG_ESS_Cmd($$)
 {
 	my ($hash, $cmd)				= @_;
@@ -666,7 +650,6 @@ sub LG_ESS_Cmd($$)
 	my $name						= $hash->{NAME};
 
 	my $PollingTimeout				= $hash->{POLLINGTIMEOUT};
-	my $Password					= $hash->{PASSWORD};
 	my $auth_key					= $hash->{temp}{AUTH_KEY};
 
 	$hash->{temp}{SERVICE}			= $cmd;
@@ -676,12 +659,7 @@ sub LG_ESS_Cmd($$)
 
 	my $url;
 	my $content;
-	if ($cmd eq "InstallerLogin")
-	{
-		$url = "https://".$ip."/v1/installer/login";
-		$content = '{"password": "18Feichtei79&"}';
-	}
-	elsif ($cmd eq "EssSwitchOn")
+	if ($cmd eq "EssSwitchOn")
 	{
 		$url = "https://".$ip."/v1/user/operation/status";
 		$content = '{"auth_key": "'.$auth_key .'","operation": "start"}';
@@ -711,6 +689,16 @@ sub LG_ESS_Cmd($$)
 		$url = "https://".$ip."/v1/user/setting/batt";
 		$content = '{"auth_key": "'.$auth_key .'","wintermode": "off"}';
 	}
+	elsif ($cmd eq "SwitchBatteryOff")
+	{
+		$url = "https://".$ip."/v1/installer/setting/batt/use";
+		$content = '{"auth_key": "'.$auth_key .'","use": "off"}';
+	}
+	elsif ($cmd eq "SwitchBatteryOn")
+	{
+		$url = "https://".$ip."/v1/installer/setting/batt/use";
+		$content = '{"auth_key": "'.$auth_key .'","use": "on"}';
+	}
 
 	my $sslPara->{sslargs} = { verify_hostname => 0};
 	my $param = {
@@ -721,11 +709,165 @@ sub LG_ESS_Cmd($$)
 					method		=> "PUT",
 					sslargs		=> $sslPara,
 					header		=> { "X-HTTP-Method-Override" => "PUT", "Content-Type" => "application/json" },
-					callback	=> \&LG_ESS_HttpResponseState
+					callback	=> \&LG_ESS_HttpResponseCmd
 				};
 
 	#Function call
 	HttpUtils_NonblockingGet($param);
 }
 
+#-----------------------------------------------------------------------------------------------------------------------
+# Subroutine for parsing command json answer
+#-----------------------------------------------------------------------------------------------------------------------
+sub LG_ESS_HttpResponseCmd($)
+{
+	my ($param, $err, $data)	= @_;
+	my $hash					= $param->{hash};
+	my $name					= $hash ->{NAME};
+	my $PollingIntervall		= $hash->{PollingIntervall};
+	my $Service					= $hash->{temp}{SERVICE};
+
+	my $type;
+	my $json ->{type} = "";
+
+	if($err ne "") 
+	{
+		# Create Log entry
+		Log3 $name, 2, $name . " : LG_ESS_HttpResponseCmd - ERROR                : ".$Service. ": No proper Communication with Gateway: " .$err;
+
+		# Set status of fhem module
+		$hash->{STATE} = "ERROR - Initial Connection failed... Try to re-connect in 10s";
+
+		# Start the timer for polling again but wait 10s
+		InternalTimer(gettimeofday()+10, "LG_ESS_UserLogin", $hash, 1);
+
+		# Create Log entry
+		Log3 $name, 2, $name . " : LG_ESS_HttpResponseCmd - ERROR                : Timer restarted to try again in 10s";
+		return "ERROR";	
+	}
+	elsif($data ne "") 
+	{
+
+		# Create Log entry for debugging
+		Log3 $name, 5, $name . "LG_ESS_HttpResponseCmd Data: ".$data;
+
+		# Login failed?
+		if ($data =~ m/auth_key failed/i)
+		{
+			# Create Log entry
+			Log3 $name, 2, $name . " : LG_ESS_HttpResponseCmd - Login failed!  Timer restarted to try again in 10s";
+
+			# Set status of fhem module
+			$hash->{STATE} = "ERROR - Login failed... Try to re-connect in 10s";
+
+			# Start the timer for polling again but wait 10s
+			InternalTimer(gettimeofday()+10, "LG_ESS_UserLogin", $hash, 1);
+			return "Login failed";
+		}
+
+		# Decode json
+		my $decodedData = decode_json($data);
+
+		# Create Log entry
+		Log3 $name, 5, $name . " : LG_ESS_HttpResponseCmd - ".$Service." ".$data;
+
+		#Start timer again
+		InternalTimer(gettimeofday() + $PollingIntervall, "LG_ESS_GetState", $hash, 1);
+		Log3 $name, 4, $name. " : LG_ESS - Internal timer for Initialisation of services started again.";
+
+		# Set status of fhem module
+		$hash->{STATE} = "Standby";
+	}
+}
+
 1;
+
+=pod
+=item summary   Module for LG ESS HOME Inverter 
+=begin html
+
+
+	<a name="LG_ESS"></a>
+
+	<h3>LG_ESS</h3>
+	<br />
+	<div>
+
+	<b>Getting the password</b>
+	<div>
+	<br />
+
+		To determine the password of the system, this module must be executed using Strawberry Perl on a laptop with WLAN.<br />
+		<br />
+		<ul>
+			<li>Install FHEM on laptop. <a href="https://wiki.fhem.de/wiki/FHEM_Installation_Windows">https://wiki.fhem.de/wiki/FHEM_Installation_Windows</a></li>
+			<li>Connect the computer to the LG_ESS system's WLAN. (WiFi password is on the nameplate)</i>
+			<li>Enter the following command in the FHEM command line to determine the password: <code> define myESS GettingPassword </code></li>
+			<li>Write down the password</li>
+		</ul>
+	</div><br />
+
+	<b>Define</b>
+	<div>
+		<br />
+		<code>define &lt;name&gt; LG_ESS &lt;ip-address&gt; &lt;password&gt;</code><br />
+		<br />
+		The module can reads current values and send commands to a LG ESS inverter.<br />
+		<br />
+
+		<b>Parameters:</b><br />
+		<ul>
+			<li><b>&lt;ip-address&gt;</b> - the ip address of the inverter</li>
+			<li><b>&lt;password&gt;</b> - the login-password for the inverter</li>
+		</ul>
+
+		<b>Example:</b><br />
+		<br />
+		<div>
+			<code>define myEss LG_ESS 192.168.2.4 password</code><br />
+		</div>
+	</div><br />
+
+	<b>Set-Commands</b>
+	<div>
+		<br />
+		<code>set &lt;name&gt; GetState</code><br />
+		<div>
+			All values of the inverter are immediately polled.
+		</div>
+		<br />
+		
+		<code>set &lt;name&gt; BatteryFastChargingMode &lt;value&gt;</code><br />
+		<div>
+			"on" switch the system to Fast Charging Mode.<br />
+			"off" switch the system to Economic Mode.<br />
+		</div><br />
+		
+		<code>set &lt;name&gt; BatteryWinterMode &lt;value&gt;</code><br />
+		<div>
+			"on" switch the Winter Mode on.<br />
+			"off"switch the Winter Mode off.<br />
+		</div><br />		
+		<code>set &lt;name&gt; System &lt;value&gt;</code><br />
+		<div>
+			"on" switch the system on.<br />
+			"off" switch the system off.<br />
+		</div><br />
+	</div>
+
+	<b>Attributes</b><br />
+
+    <ul>
+      <li><a href="#readingFnAttributes">readingFnAttributes</a></li>
+
+      <li><b>PollingIntervall</b> - A valid polling interval for automatic polling. The value must be >=10s. The default value is 30s.</li>
+      <li><b>DoNotPoll</b> - with 1 the automatic polling is switched off</li>
+      <li><b>InstallerPassword</b> - Is the installer password known, more function avaible. Eg. switching on/off the battery.</li>
+    </ul><br />
+    <br />
+	
+  </div>
+
+
+=end html
+=cut
