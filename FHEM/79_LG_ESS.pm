@@ -55,7 +55,6 @@ sub LG_ESS_Initialize($)
 	$hash->{AttrFn}				= "LG_ESS_Attr";
 
 	$hash->{AttrList}			= "DoNotPoll:0,1 " .
-								  "InstallerPassword " .
 								  "PollingIntervall " .
 								   $readingFnAttributes;
 }
@@ -232,19 +231,17 @@ sub LG_ESS_Set($@)
 			return "Unknown value $args[0] for $cmd, choose one of on/off"; 
 		}
 	}
-	elsif($cmd eq "InstallerLogin")
-	{
-		$hash->{temp}{LogInRole} = "Installer";
-		LG_ESS_UserLogin($hash);
-	}
-	elsif($cmd eq "Test")
-	{
-		#LG_ESS_InstallerLogin($hash);
+#	elsif($cmd eq "InstallerLogin")
+#	{
+#		$hash->{temp}{LogInRole} = "Installer";
+#		LG_ESS_UserLogin($hash);
+#	}
+#	elsif($cmd eq "Test")
 		LG_ESS_Cmd($hash,"SwitchBatteryOn");
 	}
 	else
 	{
-		return "Unknown argument $cmd, choose one of GetState:noArg System:on,off BatteryFastChargingMode:on,off BatteryWinterMode:on,off InstallerLogin:noArg Test:noArg";
+		return "Unknown argument $cmd, choose one of GetState:noArg System:on,off BatteryFastChargingMode:on,off BatteryWinterMode:on,off";
 	}
 
 }
@@ -868,7 +865,6 @@ sub LG_ESS_HttpResponseCmd($)
 
       <li><b>PollingIntervall</b> - A valid polling interval for automatic polling. The value must be >=10s. The default value is 30s.</li>
       <li><b>DoNotPoll</b> - with 1 the automatic polling is switched off</li>
-      <li><b>InstallerPassword</b> - Is the installer password known, more function avaible. Eg. switching on/off the battery.</li>
     </ul><br />
     <br />
 	
