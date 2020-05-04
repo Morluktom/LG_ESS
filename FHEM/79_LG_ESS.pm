@@ -8,7 +8,7 @@
 #		Written and best viewed with Notepad++ ; Language Markup: Perl
 #
 #		Author                     : Thomas Mayer 
-#		Fhem Forum                 : Not yet implemented
+#		Fhem Forum                 : https://forum.fhem.de/index.php/topic,110884.0.html
 #		Fhem Wiki                  : Not yet implemented
 #
 #		This file is part of fhem.
