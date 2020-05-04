@@ -126,7 +126,9 @@ sub LG_ESS_Undefine($$)
 	return undef;
 }
 
-###START###### Handle attributes after changes via fhem GUI ###################################################START####
+#-----------------------------------------------------------------------------------------------------------------------
+# Handle attributes after changes via fhem GUI
+#-----------------------------------------------------------------------------------------------------------------------
 sub LG_ESS_Attr(@)
 {
 	my @a                      = @_;
@@ -137,7 +139,7 @@ sub LG_ESS_Attr(@)
 	# Check whether "DoNotPoll" attribute has been provided
 	if ($a[2] eq "DoNotPoll")
 	{
-		if    ($a[3] eq 0)
+		if($a[3] eq 0)
 		{	
 			# Stop the current timer
 			RemoveInternalTimer($hash);
@@ -173,7 +175,6 @@ sub LG_ESS_Attr(@)
 	}
 	return undef;
 }
-
 
 ###START###### Manipulate reading after "set" command by fhem #################################################START####
 sub LG_ESS_Set($@)
@@ -231,14 +232,19 @@ sub LG_ESS_Set($@)
 			return "Unknown value $args[0] for $cmd, choose one of on/off"; 
 		}
 	}
+	elsif($cmd eq "InstallerLogin")
+	{
+		$hash->{temp}{LogInRole} = "Installer";
+		LG_ESS_UserLogin($hash);
+	}
 	elsif($cmd eq "Test")
 	{
 		#LG_ESS_InstallerLogin($hash);
-		LG_ESS_Cmd($hash,"SwitchBatteryOff");
+		LG_ESS_Cmd($hash,"SwitchBatteryOn");
 	}
 	else
 	{
-		return "Unknown argument $cmd, choose one of GetState:noArg System:on,off BatteryFastChargingMode:on,off BatteryWinterMode:on,off Test:noArg";
+		return "Unknown argument $cmd, choose one of GetState:noArg System:on,off BatteryFastChargingMode:on,off BatteryWinterMode:on,off InstallerLogin:noArg Test:noArg";
 	}
 
 }
@@ -691,12 +697,12 @@ sub LG_ESS_Cmd($$)
 	}
 	elsif ($cmd eq "SwitchBatteryOff")
 	{
-		$url = "https://".$ip."/v1/installer/setting/batt/use";
+		$url = "https://".$ip."/v1/installer/setting/batt";
 		$content = '{"auth_key": "'.$auth_key .'","use": "off"}';
 	}
 	elsif ($cmd eq "SwitchBatteryOn")
 	{
-		$url = "https://".$ip."/v1/installer/setting/batt/use";
+		$url = "https://".$ip."/v1/installer/setting/batt";
 		$content = '{"auth_key": "'.$auth_key .'","use": "on"}';
 	}
 
