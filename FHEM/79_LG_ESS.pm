@@ -237,8 +237,8 @@ sub LG_ESS_Set($@)
 #		LG_ESS_UserLogin($hash);
 #	}
 #	elsif($cmd eq "Test")
-		LG_ESS_Cmd($hash,"SwitchBatteryOn");
-	}
+#		LG_ESS_Cmd($hash,"SwitchBatteryOn");
+#	}
 	else
 	{
 		return "Unknown argument $cmd, choose one of GetState:noArg System:on,off BatteryFastChargingMode:on,off BatteryWinterMode:on,off";
