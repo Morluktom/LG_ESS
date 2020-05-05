@@ -104,6 +104,7 @@ sub LG_ESS_Define($$$)
 	$hash->{PollingIntervall}				= 30;
 	$hash->{POLLINGTIMEOUT}					= 10;
 	$hash->{temp}{LogInRole}				= "User";
+	$hash->{Version}						= "1.00.1";
 
 	# Initiate the timer for first time polling of  values from LG_ESS but wait 10s
 	InternalTimer(gettimeofday()+10, "LG_ESS_UserLogin", $hash, 1);
@@ -254,8 +255,6 @@ sub LG_ESS_GettingPassword($)
 	my ($hash, $def)				= @_;
 	my $name						= $hash->{NAME};
 	my $PollingTimeout				= 10;
-	$hash->{temp}{SERVICE}			= "Getting Password";
-	my $Service					= $hash->{temp}{SERVICE};
 	
 	# Stop the current timer
 	RemoveInternalTimer($hash);
@@ -285,7 +284,7 @@ sub LG_ESS_GettingPassword($)
 	if($err ne "") 
 	{
 		# Create Log entry
-		Log3 $name, 2, $name . " : LG_ESS_GettingPassword - ERROR                : ".$Service. ": No proper Communication with Gateway: " .$err;
+		Log3 $name, 2, $name . " : LG_ESS_GettingPassword - ERROR                : Getting Passwod.: No proper Communication with Gateway: " .$err;
 		return "LG ESS: could not fetch password";	
 	}
 	elsif($data ne "") 
@@ -314,7 +313,6 @@ sub LG_ESS_UserLogin($)
 	my $ip							= $hash->{IP};
 	my $name						= $hash->{NAME};
 	my $PollingTimeout				= $hash->{POLLINGTIMEOUT};
-	$hash->{temp}{SERVICE}			= "Login";
 
 	# Stop the current timer
 	RemoveInternalTimer($hash);
@@ -364,7 +362,6 @@ sub LG_ESS_HttpResponseLogin($)
 	my ($param, $err, $data)	= @_;
 	my $hash					= $param->{hash};
 	my $name					= $hash ->{NAME};
-	my $Service					= $hash->{temp}{SERVICE};
 
 	my $type;
 	my $json ->{type} = "";
@@ -372,7 +369,7 @@ sub LG_ESS_HttpResponseLogin($)
 	if($err ne "") 
 	{
 		# Create Log entry
-		Log3 $name, 2, $name . " : LG_ESS_HttpResponseLogin - ERROR                : ".$Service. ": No proper Communication with Gateway: " .$err;
+		Log3 $name, 2, $name . " : LG_ESS_HttpResponseLogin - ERROR                : ".$param->{path}. ": No proper Communication with Gateway: " .$err;
 
 		# Set status of fhem module
 		$hash->{STATE} = "ERROR - Initial Connection failed... Try to re-connect in 10s";
@@ -426,7 +423,6 @@ sub LG_ESS_HttpResponseLogin($)
 			# Start the timer for polling again but wait 10s
 			InternalTimer(gettimeofday()+10, "LG_ESS_UserLogin", $hash, 1);
 		}
-
 	}
 }
 
@@ -471,8 +467,6 @@ sub LG_ESS_GetState($)
 		return;
 	}
 
-	$hash->{temp}{SERVICE} = $state_urls[$ServiceCounterInit];
-
 	my $url = "https://".$ip.$state_urls[$ServiceCounterInit];
 	my $sslPara->{sslargs} = { verify_hostname => 0};
 	my $content = '{"auth_key": "'.$auth_key .'"}';
@@ -503,7 +497,6 @@ sub LG_ESS_HttpResponseState($)
 	my $hash					= $param->{hash};
 	my $name					= $hash ->{NAME};
 	my $ServiceCounterInit		= $hash ->{temp}{ServiceCounterInit};
-	my $Service					= $hash->{temp}{SERVICE};
 
 	my $type;
 	my $json ->{type} = "";
@@ -511,7 +504,7 @@ sub LG_ESS_HttpResponseState($)
 	if($err ne "") 
 	{
 		# Create Log entry
-		Log3 $name, 2, $name . " : LG_ESS_HttpResponseState - ERROR                : ".$Service. ": No proper Communication with Gateway: " .$err;
+		Log3 $name, 2, $name . " : LG_ESS_HttpResponseState - ERROR                : ".$param->{path}. ": No proper Communication with Gateway: " .$err;
 
 		# Set status of fhem module
 		$hash->{STATE} = "ERROR - Initial Connection failed... Try to re-connect in 10s";
@@ -551,11 +544,10 @@ sub LG_ESS_HttpResponseState($)
 		my $key1;
 		my $varName;
 		my $value;
-		my $valueOld;
 
 		# Initialize Bulkupdate
 		readingsBeginUpdate($hash);
-		if ($Service eq "/v1/user/essinfo/common")
+		if ($param->{path} eq "/v1/user/essinfo/common")
 		{
 			foreach $record ($decodedData) {
 				foreach $key (keys(%$record)) {
@@ -570,7 +562,7 @@ sub LG_ESS_HttpResponseState($)
 				}
 			}
 		}
-		elsif ($Service eq "/v1/user/essinfo/home")		
+		elsif ($param->{path} eq "/v1/user/essinfo/home")		
 		{
 			foreach $record ($decodedData) {
 				foreach $key (keys(%$record)) {
@@ -585,7 +577,7 @@ sub LG_ESS_HttpResponseState($)
 				}
 			}
 		}
-		elsif ($Service eq "/v1/user/setting/systeminfo")		
+		elsif ($param->{path} eq "/v1/user/setting/systeminfo")		
 		{
 			foreach $record ($decodedData) {
 				foreach $key (keys(%$record)) {
@@ -600,7 +592,7 @@ sub LG_ESS_HttpResponseState($)
 				}
 			}
 		}
-		elsif ($Service eq "/v1/user/setting/network")
+		elsif ($param->{path} eq "/v1/user/setting/network")
 		{
 			foreach $record ($decodedData) {
 				eval{
@@ -613,7 +605,7 @@ sub LG_ESS_HttpResponseState($)
 				}
 			}
 		}
-		elsif ($Service eq "/v1/user/setting/batt")
+		elsif ($param->{path} eq "/v1/user/setting/batt")
 		{
 			foreach $record ($decodedData) {
 				eval{
@@ -629,7 +621,7 @@ sub LG_ESS_HttpResponseState($)
 		else
 		{
 			# Create Log entry
-			Log3 $name, 5, $name . " : LG_ESS_HttpResponseState - ".$Service." ".$data;
+			Log3 $name, 5, $name . " : LG_ESS_HttpResponseState - ".$param->{path}." ".$data;
 		}
 
 		# Finish and execute Bulkupdate
@@ -654,8 +646,6 @@ sub LG_ESS_Cmd($$)
 
 	my $PollingTimeout				= $hash->{POLLINGTIMEOUT};
 	my $auth_key					= $hash->{temp}{AUTH_KEY};
-
-	$hash->{temp}{SERVICE}			= $cmd;
 
 	# Set status of fhem module
 	$hash->{STATE} = $cmd;	
@@ -728,7 +718,6 @@ sub LG_ESS_HttpResponseCmd($)
 	my $hash					= $param->{hash};
 	my $name					= $hash ->{NAME};
 	my $PollingIntervall		= $hash->{PollingIntervall};
-	my $Service					= $hash->{temp}{SERVICE};
 
 	my $type;
 	my $json ->{type} = "";
@@ -736,7 +725,7 @@ sub LG_ESS_HttpResponseCmd($)
 	if($err ne "") 
 	{
 		# Create Log entry
-		Log3 $name, 2, $name . " : LG_ESS_HttpResponseCmd - ERROR                : ".$Service. ": No proper Communication with Gateway: " .$err;
+		Log3 $name, 2, $name . " : LG_ESS_HttpResponseCmd - ERROR                : ".$param->{path}. ": No proper Communication with Gateway: " .$err;
 
 		# Set status of fhem module
 		$hash->{STATE} = "ERROR - Initial Connection failed... Try to re-connect in 10s";
@@ -750,7 +739,6 @@ sub LG_ESS_HttpResponseCmd($)
 	}
 	elsif($data ne "") 
 	{
-
 		# Create Log entry for debugging
 		Log3 $name, 5, $name . "LG_ESS_HttpResponseCmd Data: ".$data;
 
@@ -772,7 +760,7 @@ sub LG_ESS_HttpResponseCmd($)
 		my $decodedData = decode_json($data);
 
 		# Create Log entry
-		Log3 $name, 5, $name . " : LG_ESS_HttpResponseCmd - ".$Service." ".$data;
+		Log3 $name, 5, $name . " : LG_ESS_HttpResponseCmd - ".$$param->{path}." ".$data;
 
 		#Start timer again
 		InternalTimer(gettimeofday() + $PollingIntervall, "LG_ESS_GetState", $hash, 1);
