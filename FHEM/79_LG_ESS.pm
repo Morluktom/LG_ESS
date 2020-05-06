@@ -67,7 +67,7 @@ sub LG_ESS_Define($$$)
 	my ($hash, $def)              = @_;
 	my ($name, $type, $Ip, $Password) = split("[ \t]+", $def, 4);
 
-	#Fetching password
+	#Getting password
 	if ($Ip eq "GettingPassword")
 	{
 		return LG_ESS_GettingPassword($hash);
@@ -76,7 +76,7 @@ sub LG_ESS_Define($$$)
 	# Check whether regular expression has correct syntax
 	if(!$Ip || !$Password) 
 	{
-		return "Wrong syntax: define <name> LG_ESS <Ip-Adress> <Password>";
+		return "Wrong syntax: define <name> LG_ESS <IPv4-address> <Password> OR define <name> LG_ESS GettingPassword";
 	}
 
 	# Writing log entry
@@ -89,7 +89,7 @@ sub LG_ESS_Define($$$)
 	}
 	else
 	{
-		return $name .": Error - IPv4 address is not valid \n Please use \"define <devicename> LG_ESS <IPv4-address> <interval/[s]> <GatewayPassword> <PrivatePassword>\" instead";
+		return $name .": Error - IPv4 address is not valid \n Please use \"define <name> LG_ESS <IPv4-address> <Password>\" instead";
 	}
 
 	# Stop the current timer if one exists errornous 
@@ -104,7 +104,7 @@ sub LG_ESS_Define($$$)
 	$hash->{PollingIntervall}				= 30;
 	$hash->{POLLINGTIMEOUT}					= 10;
 	$hash->{temp}{LogInRole}				= "User";
-	$hash->{Version}						= "1.00.1";
+	$hash->{Version}						= "1.00.2";
 
 	# Initiate the timer for first time polling of  values from LG_ESS but wait 10s
 	InternalTimer(gettimeofday()+10, "LG_ESS_UserLogin", $hash, 1);
@@ -284,14 +284,14 @@ sub LG_ESS_GettingPassword($)
 	if($err ne "") 
 	{
 		# Create Log entry
-		Log3 $name, 2, $name . " : LG_ESS_GettingPassword - ERROR                : Getting Passwod.: No proper Communication with Gateway: " .$err;
-		return "LG ESS: could not fetch password";	
+		Log3 $name, 0, $name . " : LG_ESS_GettingPassword - ERROR                : Getting Password.: No proper Communication with Gateway: " .$err;
+		return "LG ESS: could not fetch password.\nErrorcode:\n".$err;	
 	}
 	elsif($data ne "") 
 	{
 
 		# Create Log entry for debugging
-		Log3 $name, 5, $name . "LG_ESS_GettingPassword Data: ".$data;
+		Log3 $name, 0, $name . "LG_ESS_GettingPassword Data: ".$data;
 
 		# Decode json
 		my $decodedData = decode_json($data);
