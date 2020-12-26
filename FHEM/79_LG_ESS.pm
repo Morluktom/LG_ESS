@@ -104,7 +104,7 @@ sub LG_ESS_Define($$$)
 	$hash->{PollingIntervall}				= 30;
 	$hash->{POLLINGTIMEOUT}					= 10;
 	$hash->{temp}{LogInRole}				= "User";
-	$hash->{Version}						= "1.00.2";
+	$hash->{Version}						= "1.00.3";
 
 	# Initiate the timer for first time polling of  values from LG_ESS but wait 10s
 	InternalTimer(gettimeofday()+10, "LG_ESS_UserLogin", $hash, 1);
@@ -187,19 +187,23 @@ sub LG_ESS_Set($@)
 	{
 		LG_ESS_GetState($hash);
 	}
-	elsif($cmd eq "BatteryFastChargingMode")
+	elsif($cmd eq "BatteryChargingMode")
 	{
-		if($args[0] eq "on")
+		if($args[0] eq "battery_care")
 		{
-			LG_ESS_Cmd($hash,"BatteryFastChargingModeOn");
+			LG_ESS_Cmd($hash,"BatteryChargingModeBatteryCare");
 		}
-		elsif($args[0] eq "off")
+		elsif($args[0] eq "fast_charge")
 		{
-			LG_ESS_Cmd($hash,"BatteryFastChargingModeOff");
+			LG_ESS_Cmd($hash,"BatteryChargingModeFastCharge");
 		}
+		elsif($args[0] eq "weather_forecast")
+		{
+			LG_ESS_Cmd($hash,"BatteryChargingModeWeatherForecast");
+		}		
 		else
 		{
-			return "Unknown value $args[0] for $cmd, choose one of on/off";  
+			return "Unknown value $args[0] for $cmd, choose one of battery_care, fast_charge, weather_forecast";  
 		}
 	}
 	elsif($cmd eq "BatteryWinterMode")
@@ -242,7 +246,7 @@ sub LG_ESS_Set($@)
 #	}
 	else
 	{
-		return "Unknown argument $cmd, choose one of GetState:noArg System:on,off BatteryFastChargingMode:on,off BatteryWinterMode:on,off";
+		return "Unknown argument $cmd, choose one of GetState:noArg System:on,off BatteryChargingMode:battery_care,fast_charge,weather_forecast BatteryWinterMode:on,off";
 	}
 
 }
@@ -662,15 +666,20 @@ sub LG_ESS_Cmd($$)
 		$url = "https://".$ip."/v1/user/operation/status";
 		$content = '{"auth_key": "'.$auth_key .'","operation": "stop"}';
 	}
-	elsif ($cmd eq "BatteryFastChargingModeOn")
+	elsif ($cmd eq "BatteryChargingModeBatteryCare")
 	{
 		$url = "https://".$ip."/v1/user/setting/batt";
-		$content = '{"auth_key": "'.$auth_key .'","alg_setting": "on"}';
+		$content = '{"auth_key": "'.$auth_key .'","alg_setting": "0"}';
 	}
-	elsif ($cmd eq "BatteryFastChargingModeOff")
+	elsif ($cmd eq "BatteryChargingModeFastCharge")
 	{
 		$url = "https://".$ip."/v1/user/setting/batt";
-		$content = '{"auth_key": "'.$auth_key .'","alg_setting": "off"}';
+		$content = '{"auth_key": "'.$auth_key .'","alg_setting": "1"}';
+	}
+	elsif ($cmd eq "BatteryChargingModeWeatherForecast")
+	{
+		$url = "https://".$ip."/v1/user/setting/batt";
+		$content = '{"auth_key": "'.$auth_key .'","alg_setting": "2"}';
 	}
 	elsif ($cmd eq "BatteryWinterModeOn")
 	{
@@ -755,13 +764,15 @@ sub LG_ESS_HttpResponseCmd($)
 			InternalTimer(gettimeofday()+10, "LG_ESS_UserLogin", $hash, 1);
 			return "Login failed";
 		}
+		
+		eval{
+			# Decode json
+			my $decodedData = decode_json($data);
 
-		# Decode json
-		my $decodedData = decode_json($data);
-
-		# Create Log entry
-		Log3 $name, 5, $name . " : LG_ESS_HttpResponseCmd - ".$$param->{path}." ".$data;
-
+			# Create Log entry
+			Log3 $name, 5, $name . " : LG_ESS_HttpResponseCmd - ".$$param->{path}." ".$data;
+		};
+		
 		#Start timer again
 		InternalTimer(gettimeofday() + $PollingIntervall, "LG_ESS_GetState", $hash, 1);
 		Log3 $name, 4, $name. " : LG_ESS - Internal timer for Initialisation of services started again.";
@@ -828,10 +839,11 @@ sub LG_ESS_HttpResponseCmd($)
 		</div>
 		<br />
 		
-		<code>set &lt;name&gt; BatteryFastChargingMode &lt;value&gt;</code><br />
+		<code>set &lt;name&gt; BatteryChargingMode &lt;value&gt;</code><br />
 		<div>
-			"on" switch the system to Fast Charging Mode.<br />
-			"off" switch the system to Economic Mode.<br />
+			"battery_care" switch the system to Battery Care Mode.<br />
+			"fast_charge" switch the system to Fast Charge Mode.<br />
+			"weather_forecast" switch the system to Weather Forcast Mode.<br />
 		</div><br />
 		
 		<code>set &lt;name&gt; BatteryWinterMode &lt;value&gt;</code><br />
