@@ -104,7 +104,7 @@ sub LG_ESS_Define($$$)
 	$hash->{PollingIntervall}				= 30;
 	$hash->{POLLINGTIMEOUT}					= 10;
 	$hash->{temp}{LogInRole}				= "User";
-	$hash->{Version}						= "1.00.3";
+	$hash->{Version}						= "1.00.4";
 
 	# Initiate the timer for first time polling of  values from LG_ESS but wait 10s
 	InternalTimer(gettimeofday()+10, "LG_ESS_UserLogin", $hash, 1);
@@ -269,13 +269,12 @@ sub LG_ESS_GettingPassword($)
 	my $url = "https://192.168.23.1/v1/user/setting/read/password";
 	my $content = '{"key": "lgepmsuser!@#"}';
 
-	my $sslPara->{sslargs} = { verify_hostname => 0};
 	my $param = {
 					url			=> $url,
 					timeout		=> $PollingTimeout,
 					data		=> $content,
 					method		=> "POST",
-					sslargs		=> $sslPara,
+					sslargs		=> { verify_hostname => 0, SSL_verify_mode => 0 },
 					header		=> "Content-Type: application/json",
 				};
 
@@ -341,15 +340,14 @@ sub LG_ESS_UserLogin($)
 		Log3 $name, 4, $name . "LG_ESS_UserLogin - Try to log in as user.";
 	}
 	my $content = '{"password": "'.$password .'"}';
-	
-	my $sslPara->{sslargs} = { verify_hostname => 0};
+
 	my $param = {
 					url			=> $url,
 					timeout		=> $PollingTimeout,
 					data		=> $content,
 					hash		=> $hash,
 					method		=> "PUT",
-					sslargs		=> $sslPara,
+					sslargs		=> { verify_hostname => 0, SSL_verify_mode => 0 },
 					header		=> "Content-Type: application/json",
 					callback	=> \&LG_ESS_HttpResponseLogin
 				};
@@ -472,7 +470,7 @@ sub LG_ESS_GetState($)
 	}
 
 	my $url = "https://".$ip.$state_urls[$ServiceCounterInit];
-	my $sslPara->{sslargs} = { verify_hostname => 0};
+
 	my $content = '{"auth_key": "'.$auth_key .'"}';
 	my $param = {
 					url			=> $url,
@@ -480,7 +478,7 @@ sub LG_ESS_GetState($)
 					data		=> $content,
 					hash		=> $hash,
 					method		=> "POST",
-					sslargs		=> $sslPara,
+					sslargs		=> { verify_hostname => 0, SSL_verify_mode => 0 },
 					header		=> "Content-Type: application/json",
 					callback	=>  \&LG_ESS_HttpResponseState
 				};
@@ -702,14 +700,13 @@ sub LG_ESS_Cmd($$)
 		$content = '{"auth_key": "'.$auth_key .'","use": "on"}';
 	}
 
-	my $sslPara->{sslargs} = { verify_hostname => 0};
 	my $param = {
 					url			=> $url,
 					timeout		=> $PollingTimeout,
 					data		=> $content,
 					hash		=> $hash,
 					method		=> "PUT",
-					sslargs		=> $sslPara,
+					sslargs		=> { verify_hostname => 0, SSL_verify_mode => 0 },
 					header		=> { "X-HTTP-Method-Override" => "PUT", "Content-Type" => "application/json" },
 					callback	=> \&LG_ESS_HttpResponseCmd
 				};
