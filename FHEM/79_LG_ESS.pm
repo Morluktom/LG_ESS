@@ -104,7 +104,7 @@ sub LG_ESS_Define($$$)
 	$hash->{PollingIntervall}				= 30;
 	$hash->{POLLINGTIMEOUT}					= 10;
 	$hash->{temp}{LogInRole}				= "User";
-	$hash->{Version}						= "1.00.4";
+	$hash->{Version}						= "1.00.5";
 
 	# Initiate the timer for first time polling of  values from LG_ESS but wait 10s
 	InternalTimer(gettimeofday()+10, "LG_ESS_UserLogin", $hash, 1);
@@ -122,6 +122,10 @@ sub LG_ESS_Undefine($$)
 	my $name = $hash->{NAME};	
 
 	Log3 $name, 3, $name. " LG_ESS has been undefined.";
+	
+	# Stop the current timer if one exists errornous 
+	RemoveInternalTimer($hash);
+	Log3 $name, 4, $name. " : LG_ESS - InternalTimer has been removed.";	
 
 	return undef;
 }
